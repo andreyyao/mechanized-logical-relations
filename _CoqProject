@@ -1,0 +1,4 @@
+-Q theories LogicalRelations
+-arg -w -arg -notation-overridden
+
+theories/*.v
