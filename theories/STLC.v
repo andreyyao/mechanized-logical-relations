@@ -42,13 +42,45 @@ Module STLC.
     end.
 
   Inductive is_value : expr -> Prop :=
-  | null_value : is_value null
-  | abs_value n e : is_value (abs n e).
+  | null_is_value : is_value null
+  | abs_is_value n e : is_value (abs n e).
 
   (* Small-step operational semantics *)
-  Inductive cbv_step : expr -> expr -> Prop :=
-  | app_cbv n e_bod v_arg (H: is_value v_arg): cbv_step (app (abs n e_bod) v_arg) (substitute e_bod n v_arg)
-  | fun_cbv e e' e_arg : cbv_step e e' -> cbv_step (app e e_arg) (app e' e_arg)
-  | arg_cbv v e e' (H: is_value v) : cbv_step (app v e) (app v e').
+  Inductive cbv_once : expr -> expr -> Prop :=
+  | app_cbv_once n e_bod v_arg (H: is_value v_arg): cbv_once (app (abs n e_bod) v_arg) (substitute e_bod n v_arg)
+  | fun_cbv_once e e' e_arg : cbv_once e e' -> cbv_once (app e e_arg) (app e' e_arg)
+  | arg_cbv_once v e e' (H: is_value v) : cbv_once (app v e) (app v e').
+
+  (* Multi-step with the kleene star, aka reflexive and transitive closure of cbv_once *)
+  Inductive cbv_multi : expr -> expr -> Prop :=
+  | base_cbv_multi e1 e2 : cbv_once e1 e2 -> cbv_multi e1 e2
+  | refl_cbv_multi e : cbv_multi e e
+  | trans_cbv_multi e1 e2 e3 : cbv_multi e1 e2 -> cbv_multi e2 e3 -> cbv_multi e1 e3.
+
+  (* Inductive *)
+  (*   normal_form : expr -> Prop := *)
+  (* | neutral_normal_form e : neutral_form e -> normal_form e *)
+  (* | abs_normal_form n e : normal_form e -> normal_form (abs n e) *)
+  (* with *)
+  (*   neutral_form : expr -> Prop := *)
+  (* | var_neutral_form n : neutral_form (var n) *)
+  (* | app_neutral_form e1 e2 : neutral_form e1 -> normal_form e2 -> neutral_form (app e1 e2). *)
+
+  (* Inductive *)
+  (*   V : tipe -> expr -> Prop := *)
+  (* | V_unit t : V t null *)
+  (* | V_arrow t1 t2 n e (H: forall v, V t1 v -> E t2 (app e v)) : V (arrow t1 t2) (abs n e) *)
+  (* with *)
+  (*   E : tipe -> expr -> Prop := *)
+  (* | E_t t e v (H: is_value v) : cbv_multi e v -> V t v -> E t v. *)
+
+  Program Fixpoint
+    V (t : tipe) : expr -> Prop :=
+    match t with
+    | unit => fun v => true
+    | arrow t1 t2 => fun v => exists e.
+    end
+    and
+    E (t : tipe) : expr -> bool :=
 
 End STLC.
