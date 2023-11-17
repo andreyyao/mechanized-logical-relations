@@ -20,7 +20,13 @@ Module STLC.
 
   Definition empty_context : context := fun n => None.
 
-  Definition context_update (c: context) n t := fun m => if Nat.eqb m n then c m else Some t.
+  Definition conservative_update {V: Type} (map: name -> option V) key value :=
+    fun k => match map k with
+          | None => if Nat.eqb key k then Some value else None
+          | _ => map k end.
+
+  Definition context_update (c: context) n t := conservative_update c n t.
+
   Notation "X , Y ::: Z" := (context_update X Y Z) (at level 100).
 
   Notation "∅" := empty_context.
@@ -34,7 +40,7 @@ Module STLC.
 
   Notation " C ⊢ E ::: T " := (type_checks C E T) (at level 99).
 
-  (* Substituition *)
+  (* Substituition e1[n ↦ e2]*)
   Fixpoint substitute e1 n e2 : expr :=
     match e1 with
     | null => null
@@ -115,10 +121,15 @@ Module STLC.
        type_checks_parallel_subst (Γ, n ::: t) γ -> type_checks_parallel_subst Γ γ.
   Proof.
     unfold type_checks_parallel_subst. intros. specialize H with (n := n0) (t := t0).
-    unfold context_update in H. destruct (Nat.eqb n0 n).
-    - inversion H0. auto.
-    - admit.
-  Admitted.
+    unfold context_update, conservative_update in H. destruct (Γ n0).
+    - auto.
+    - inversion H0.
+  Qed.
+
+  Lemma type_check_parallel_subst_subst : forall Γ γ n e v, (type_checks_parallel_subst Γ γ) ->
+                 (substitute (parallel_subst e γ) n v) =
+                   (parallel_subst e (conservative_update γ n v)).
+  Proof.
 
   Lemma cbv_multi_under_fun : forall e1 e1' e2,
       cbv_multi e1 e1' -> cbv_multi (app e1 e2) (app e1' e2).
@@ -164,11 +175,11 @@ Module STLC.
                 ** destruct H5. destruct H5. destruct H5. subst x0. apply abs_is_value.
           -- auto.
       + auto.
-    - intros. specialize (IHtype_checks γ). eexists (parallel_subst (abs n e) γ).
+    - intros. eexists (parallel_subst (abs n e) γ).
       split.
       + apply refl_cbv_multi.
       + simpl (parallel_subst (abs n e) γ). simpl. eexists n. eexists (parallel_subst e (fun m : nat => if Nat.eqb m n then None else γ m)). split.
         * reflexivity.
-        * intros. esplit.
+        * intros.
   Admitted.
 End STLC.
