@@ -177,7 +177,7 @@ Module STLC.
     | Arrow t1 t2 => exists e: {bind expr}, v = Abs e /\ forall (v' : expr), V t1 v' -> E t2 (e .[v' .: ids])
     end.
 
-  Definition E t e := exists v, (cbv_multi e v) /\ (V t v).
+  Definition E t e := exists v, (e ⇒* v) /\ (V t v).
 
   Lemma V_implies_value : forall t v, V t v -> value v.
   Proof.
@@ -254,7 +254,7 @@ Module STLC.
   (** Strong normalization of CBV STLC *)
   Theorem strong_normalization : forall e t, ∅ ⊢ e ::: t -> exists v, value v /\ e ⇒* v.
   Proof.
-    intros. apply (fundamental_theorem nil e t) in H. unfold semant_typing in H. Print SubstLemmas_expr. specialize H with (@ids expr Ids_expr). rewrite subst_id in H. destruct H. apply subst_empty. exists x. split; destruct H. apply (V_implies_value t). auto. auto.
+    intros. apply (fundamental_theorem nil e t) in H. unfold semant_typing in H. specialize H with (@ids expr Ids_expr). rewrite subst_id in H. destruct H. apply subst_empty. exists x. split; destruct H; (try apply (V_implies_value t); auto).
   Qed.
 
 End STLC.
