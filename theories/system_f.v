@@ -12,6 +12,9 @@ Module System_F.
 
   Open Scope list_scope.
 
+  #[export] Hint Resolve Operators_Properties.clos_rst_is_equiv : core.
+  #[export] Hint Resolve Operators_Properties.clos_rt_is_preorder : core.
+
   (* I referenced this document for dealing with two-leveled de Bruijn indices: *)
   (* https://www.ps.uni-saarland.de/autosubst/doc/Ssr.SystemF_CBV.html *)
 
@@ -32,6 +35,7 @@ Module System_F.
   | Var (x : var)
   | Null.
 
+  (* Let Autosubst take care of substitution *)
   #[export] Instance Ids_type : Ids tipe. derive. Defined.
   #[export] Instance Rename_type : Rename tipe. derive. Defined.
   #[export] Instance Subst_type : Subst tipe. derive. Defined.
@@ -51,14 +55,14 @@ Module System_F.
   | value_null : value Null.
   #[export] Hint Constructors value : core.
 
-  (** Small step CBV beta reduction *)
+  (** Small step CBV beta reduction.  *)
   Reserved Notation " e '⇒' f " (at level 50).
   Inductive step : expr -> expr -> Prop :=
   | cbv_efun e1 e2 e1' : e1 ⇒ e1' -> (EApp e1 e2) ⇒ (EApp e1' e2)
   | cbv_earg t e e2 e2' : e2 ⇒ e2' -> (EApp (EAbs t e) e2) ⇒ (EApp (EAbs t e) e2')
   | cbv_esub t e v : EApp (EAbs t e) v ⇒ (e.[v/])
   | cbv_tfun e e' t : e ⇒ e' -> (TApp e t) ⇒ (TApp e' t)
-  | cbv_tsub e t : TApp (TAbs e) t ⇒ e (* e.|[t/] *)
+  | cbv_tsub e t : TApp (TAbs e) t ⇒ e.|[t/]
   where " e '⇒' f " := (step e f).
   #[export] Hint Constructors step : core.
 
@@ -83,8 +87,8 @@ Module System_F.
   Proof. intros. apply rtn1_trans with (y := e); eauto. Qed.
   #[export] Hint Resolve multistep_once : core.
 
-  Definition beta_equiv := clos_refl_sym_trans_n1 _ step.
-  #[export] Hint Constructors clos_refl_sym_trans_n1: core.
+  Definition beta_equiv := clos_refl_sym_trans _ step.
+  #[export] Hint Constructors clos_refl_sym_trans: core.
   Notation "e '≡' f" := (beta_equiv e f) (at level 20).
 
   Lemma multistep_implies_beta : forall e e', e ⇒* e' -> e ≡ e'.
@@ -95,13 +99,13 @@ Module System_F.
 
   (* A compatible relation is a binary relation that respects beta equivalence *)
   Definition compatible (R : rel) : Prop :=
-    forall e1 e2 e1' e2', e1 ≡ e2 -> e1' ≡ e2' -> R e1 e2 -> R e1' e2'.
+    forall e1 e2 e1' e2', e1 ≡ e1' -> e2 ≡ e2' -> R e1 e2 -> R e1' e2'.
 
   (* A dependent sum of relation with a proof of compatibility *)
   Definition compat_rel : Type := sig compatible.
 
-  Lemma equiv_rel_compatible : compat_rel.
-  Proof. exists beta_equiv. unfold compatible. intros. eauto. Qed.
+  Lemma beta_equiv_compatible : compat_rel.
+  Proof. exists beta_equiv. unfold compatible. intros. apply rst_trans with (y := e1); eauto. Qed.
 
   Fixpoint V (ρ : var -> compat_rel) t v1 v2 {struct t} : Prop :=
     let E ρ t e1 e2 : Prop := exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2 in
@@ -117,6 +121,14 @@ Module System_F.
   Lemma V_implies_E : forall ρ t v1 v2, V ρ t v1 v2 -> E ρ t v1 v2.
   Proof. intros. unfold E. eauto. Qed.
   #[export] Hint Resolve V_implies_E : core.
+
+  (* Lemma V_implies_value : forall ρ t v1 v2, (forall n, t <> TVar n) -> V ρ t v1 v2 -> value v1 /\ value v2. *)
+  (* Proof. *)
+  (*   intros ρ t v1 v2 H0 H. induction t. *)
+  (*   - destruct H. subst. smash. *)
+  (*   - destruct H as [e1 [e2 [a1 [a2 _]]]]. subst. smash. *)
+  (*   - specialize (H0 v). contradiction. *)
+  (*   - assert (forall n, t <> TVar n) as A. { intros. unfold not. intros. subst. } *)
 
   (* The free expression variable context is a stack, with the head being the most recently bound variable *)
   Definition ev_context : Type := List.list tipe.
@@ -150,20 +162,16 @@ Module System_F.
   #[export] Hint Constructors typing : core.
 
   Lemma app_fun_steps_steps : forall e e' e'', e ⇒* e' -> (EApp e e'') ⇒* (EApp e' e'').
-  Proof.
-    intros. induction H.
-    - apply rtn1_refl.
-    - apply rtn1_trans with (y := (EApp y e'')); auto.
-  Qed.
+  Proof. intros. induction H; eauto. Qed.
   #[export] Hint Resolve app_fun_steps_steps : core.
 
   Lemma app_arg_steps_steps : forall e e' e'' t, e' ⇒* e'' -> (EApp (EAbs t e) e') ⇒* (EApp (EAbs t e) e'').
-  Proof.
-    intros. induction H.
-    - apply rtn1_refl.
-    - apply rtn1_trans with (y := (EApp (EAbs t e) y)); auto.
-  Qed.
+  Proof. intros. induction H; eauto. Qed.
   #[export] Hint Resolve app_arg_steps_steps : core.
+
+  Lemma tapp_fun_steps_steps :  forall e e' t, e ⇒* e' -> (TApp e t) ⇒* (TApp e' t).
+  Proof. intros. induction H; eauto. Qed.
+  #[export] Hint Resolve tapp_fun_steps_steps : core.
 
   (* This is the expression Λ X. λ x:X. x *)
   Example polymorphic_identity : expr :=
@@ -192,13 +200,17 @@ Module System_F.
   (** Fundamental theorem of logical relations for System F : Parametricity *)
   Theorem parametricity : forall Δ Γ e t, Δ;Γ ⊢ e ::: t -> Δ;Γ ⊨ e ~ e ::: t.
   Proof.
-    intros. unfold semantically_related. unfold E. induction H; intros; simpl.
-    - exists (EAbs t1 e.[up γ1]), (EAbs t1 e.[up γ2]). repeat split; (try apply rtn1_refl). exists e.[up γ1], e.[up γ2]. smash. intros. specialize (IHtyping ρ (v1' .: γ1) (v2' .: γ2)). repeat rewrite autosubst_help. auto.
-    - destruct (IHtyping1 ρ γ1 γ2 H1) as [f1 [f2 [Sfun1 [Sfun2 Vfun]]]]. destruct (IHtyping2 ρ γ1 γ2 H1) as [arg1 [arg2 [Sarg1 [Sarg2 Varg]]]]. clear IHtyping1. clear IHtyping2. inversion Vfun. rename x into e3. destruct H2 as [e4 [Eq1 [Eq2]]]. subst. specialize (H2 arg1 arg2 Varg). destruct H2 as [v1 [v2 [Sapp1 [Sapp2 Vapp]]]]. exists v1, v2. smash.
-      + apply multistep_trans with (e' := e3.[arg1/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) e2.[γ1]); eauto.
+    intros. unfold semantically_related. unfold E. induction H; intros.
+    (* EAbs *)
+    - exists (EAbs t1 e.[up γ1]), (EAbs t1 e.[up γ2]). smash. exists e.[up γ1], e.[up γ2]. smash. intros. specialize (IHtyping ρ (v1' .: γ1) (v2' .: γ2)). repeat rewrite autosubst_help. auto.
+    (* EApp *)
+    - simpl. destruct (IHtyping1 ρ γ1 γ2 H1) as [f1 [f2 [Sfun1 [Sfun2 Vfun]]]]. destruct (IHtyping2 ρ γ1 γ2 H1) as [arg1 [arg2 [Sarg1 [Sarg2 Varg]]]]. clear IHtyping1. clear IHtyping2. inversion Vfun. rename x into e3. destruct H2 as [e4 [Eq1 [Eq2]]]. subst. specialize (H2 arg1 arg2 Varg). destruct H2 as [v1 [v2 [Sapp1 [Sapp2 Vapp]]]]. exists v1, v2. smash.
+      + apply multistep_trans with (e' := e3.[arg1/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) e2.[γ1]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) arg1); eauto. apply multistep_once. apply cbv_esub.
       + apply multistep_trans with (e' := e4.[arg2/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e4) e2.[γ2]); eauto.
-    - exists (TAbs e.[γ1 >>| ren (+1)]), (TAbs e.[γ2 >>| ren (+1)]). smash. exists (e.[γ1 >>| ren (+1)]), (e.[γ2 >>| ren (+1)]). smash. intros. specialize (IHtyping ρ (γ1 >>| ren (+1)) (γ2 >>| ren (+1))). admit.
-    - destruct (IHtyping ρ γ1 γ2 H0) as [v1 [v2 [S1 [S2 Vall]]]]. inversion Vall as [e1 [e2 [Eq1 [Eq2]]]]. subst. specialize (H1 equiv_rel_compatible).
+    (* TAbs *)
+    - simpl. exists (TAbs e.[γ1 >>| ren (+1)]), (TAbs e.[γ2 >>| ren (+1)]). smash. exists (e.[γ1 >>| ren (+1)]), (e.[γ2 >>| ren (+1)]). smash. intros. specialize (IHtyping (R .: ρ) (γ1 >>| ren (+1)) (γ2 >>| ren (+1))). assert (sem_rel_expr_substs (R .: ρ) Γ (γ1 >>| ren (+1)) (γ2 >>| ren (+1))) as Hyp. { induction H0. - autosubst. - simpl. } admit.
+    (* TApp *)
+    - destruct (IHtyping ρ γ1 γ2 H0) as [v1 [v2 [S1 [S2 Vall]]]]. inversion Vall as [e1 [e2 [Eq1 [Eq2]]]]. subst.
 
   (** Strong normalization of CBV STLC *)
   Theorem strong_normalization : forall e t, ∅ ⊢ e ::: t -> exists v, value v /\ e ⇒* v.
