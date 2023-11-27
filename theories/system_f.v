@@ -185,13 +185,13 @@ Module System_F.
 
   Definition parallel_subst : Type := var -> expr.
 
-  Inductive sem_rel_expr_substs : (var -> compat_rel) -> ev_context -> parallel_subst -> parallel_subst -> Prop :=
-  | nil_sem_rel_expr_substs ρ : sem_rel_expr_substs ρ nil ids ids
-  | cons_sem_rel_expr_substs ρ t Γ γ1 γ2 e1 e2 : sem_rel_expr_substs ρ Γ γ1 γ2 -> E ρ t e1 e2 -> sem_rel_expr_substs ρ (t :: Γ) (e1 .: γ1) (e2 .: γ2).
+  Inductive sem_rel_expr_substs : ev_context -> (var -> compat_rel) -> parallel_subst -> parallel_subst -> Prop :=
+  | nil_sem_rel_expr_substs ρ : sem_rel_expr_substs nil ρ ids ids
+  | cons_sem_rel_expr_substs ρ t Γ γ1 γ2 e1 e2 : sem_rel_expr_substs Γ ρ γ1 γ2 -> E ρ t e1 e2 -> sem_rel_expr_substs (t :: Γ) ρ (e1 .: γ1) (e2 .: γ2).
   #[export] Hint Constructors sem_rel_expr_substs : core.
 
   Definition semantically_related (Δ : tv_context) Γ e1 e2 t :=
-    forall ρ γ1 γ2, sem_rel_expr_substs ρ Γ γ1 γ2 -> E ρ t e1 .[γ1] e2.[γ2].
+    forall ρ γ1 γ2, sem_rel_expr_substs Γ ρ γ1 γ2 -> E ρ t e1 .[γ1] e2.[γ2].
   Notation "Δ ';' Γ ⊨ e '~' f ':::' t" := (semantically_related Δ Γ e f t) (at level 96).
 
   Lemma autosubst_help : forall e γ v, e.[up γ].[v/] = e.[v .: γ].
@@ -205,10 +205,10 @@ Module System_F.
     - exists (EAbs t1 e.[up γ1]), (EAbs t1 e.[up γ2]). smash. exists e.[up γ1], e.[up γ2]. smash. intros. specialize (IHtyping ρ (v1' .: γ1) (v2' .: γ2)). repeat rewrite autosubst_help. auto.
     (* EApp *)
     - simpl. destruct (IHtyping1 ρ γ1 γ2 H1) as [f1 [f2 [Sfun1 [Sfun2 Vfun]]]]. destruct (IHtyping2 ρ γ1 γ2 H1) as [arg1 [arg2 [Sarg1 [Sarg2 Varg]]]]. clear IHtyping1. clear IHtyping2. inversion Vfun. rename x into e3. destruct H2 as [e4 [Eq1 [Eq2]]]. subst. specialize (H2 arg1 arg2 Varg). destruct H2 as [v1 [v2 [Sapp1 [Sapp2 Vapp]]]]. exists v1, v2. smash.
-      + apply multistep_trans with (e' := e3.[arg1/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) e2.[γ1]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) arg1); eauto. apply multistep_once. apply cbv_esub.
+      + apply multistep_trans with (e' := e3.[arg1/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) e2.[γ1]); eauto.
       + apply multistep_trans with (e' := e4.[arg2/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e4) e2.[γ2]); eauto.
     (* TAbs *)
-    - simpl. exists (TAbs e.[γ1 >>| ren (+1)]), (TAbs e.[γ2 >>| ren (+1)]). smash. exists (e.[γ1 >>| ren (+1)]), (e.[γ2 >>| ren (+1)]). smash. intros. specialize (IHtyping (R .: ρ) (γ1 >>| ren (+1)) (γ2 >>| ren (+1))). assert (sem_rel_expr_substs (R .: ρ) Γ (γ1 >>| ren (+1)) (γ2 >>| ren (+1))) as Hyp. { induction H0. - autosubst. - simpl. } admit.
+    - simpl. exists (TAbs e.[γ1 >>| ren (+1)]), (TAbs e.[γ2 >>| ren (+1)]). smash. exists (e.[γ1 >>| ren (+1)]), (e.[γ2 >>| ren (+1)]). smash. intros. specialize (IHtyping (R .: ρ) (γ1 >>| ren (+1)) (γ2 >>| ren (+1))). admit.
     (* TApp *)
     - destruct (IHtyping ρ γ1 γ2 H0) as [v1 [v2 [S1 [S2 Vall]]]]. inversion Vall as [e1 [e2 [Eq1 [Eq2]]]]. subst.
 
