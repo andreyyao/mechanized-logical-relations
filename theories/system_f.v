@@ -60,7 +60,7 @@ Module System_F.
   Inductive step : expr -> expr -> Prop :=
   | cbv_efun e1 e2 e1' : e1 ⇒ e1' -> (EApp e1 e2) ⇒ (EApp e1' e2)
   | cbv_earg t e e2 e2' : e2 ⇒ e2' -> (EApp (EAbs t e) e2) ⇒ (EApp (EAbs t e) e2')
-  | cbv_esub t e v : EApp (EAbs t e) v ⇒ (e.[v/])
+  | cbv_esub t e v : value v -> EApp (EAbs t e) v ⇒ (e.[v/])
   | cbv_tfun e e' t : e ⇒ e' -> (TApp e t) ⇒ (TApp e' t)
   | cbv_tsub e t : TApp (TAbs e) t ⇒ e.|[t/]
   where " e '⇒' f " := (step e f).
@@ -94,42 +94,6 @@ Module System_F.
   Lemma multistep_implies_beta : forall e e', e ⇒* e' -> e ≡ e'.
   Proof. intros. unfold beta_equiv. induction H; eauto. Qed.
 
-  (* The type of binary relations on expressions *)
-  Definition rel : Type := Relation_Definitions.relation expr.
-
-  (* A compatible relation is a binary relation that respects beta equivalence *)
-  Definition compatible (R : rel) : Prop :=
-    forall e1 e2 e1' e2', e1 ≡ e1' -> e2 ≡ e2' -> R e1 e2 -> R e1' e2'.
-
-  (* A dependent sum of relation with a proof of compatibility *)
-  Definition compat_rel : Type := sig compatible.
-
-  Lemma beta_equiv_compatible : compat_rel.
-  Proof. exists beta_equiv. unfold compatible. intros. apply rst_trans with (y := e1); eauto. Qed.
-
-  Fixpoint V (ρ : var -> compat_rel) t v1 v2 {struct t} : Prop :=
-    let E ρ t e1 e2 : Prop := exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2 in
-    match t with
-    | TVar n => proj1_sig (ρ n) v1 v2
-    | Unit => v1 = Null /\ v2 = Null
-    | Arrow t1 t2 => exists (e1 e2 : {bind expr}), v1 = EAbs t1 e1 /\ v2 = EAbs t1 e2 /\ (forall v1' v2', V ρ t1 v1' v2' -> E ρ t2 (e1.[v1'/]) (e2.[v2'/]))
-    | All t => exists e1 e2 : expr, v1 = TAbs e1 /\ v2 = TAbs e2 /\ (forall R, E (R .: ρ) t e1 e2)
-    end.
-
-  Definition E ρ t e1 e2 : Prop := exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2.
-
-  Lemma V_implies_E : forall ρ t v1 v2, V ρ t v1 v2 -> E ρ t v1 v2.
-  Proof. intros. unfold E. eauto. Qed.
-  #[export] Hint Resolve V_implies_E : core.
-
-  (* Lemma V_implies_value : forall ρ t v1 v2, (forall n, t <> TVar n) -> V ρ t v1 v2 -> value v1 /\ value v2. *)
-  (* Proof. *)
-  (*   intros ρ t v1 v2 H0 H. induction t. *)
-  (*   - destruct H. subst. smash. *)
-  (*   - destruct H as [e1 [e2 [a1 [a2 _]]]]. subst. smash. *)
-  (*   - specialize (H0 v). contradiction. *)
-  (*   - assert (forall n, t <> TVar n) as A. { intros. unfold not. intros. subst. } *)
-
   (* The free expression variable context is a stack, with the head being the most recently bound variable *)
   Definition ev_context : Type := List.list tipe.
 
@@ -160,6 +124,39 @@ Module System_F.
   | axiom_rule Δ Γ n t : well_formed_tipe Δ t -> lookup Γ n = Some t -> Δ;Γ ⊢ (Var n) ::: t
   where " Δ ';' Γ '⊢' e ':::' t " := (typing Δ Γ e t).
   #[export] Hint Constructors typing : core.
+
+  (* Rel[τ1, τ2] *)
+
+  Notation expr_rel := (Relation_Definitions.relation expr).
+
+  Definition triple : Type := (tipe * tipe) * expr_rel.
+
+  Definition Rel t1 t2 R : Prop := forall v1 v2, R v1 v2 -> value v1 /\ value v2 /\ (0;nil ⊢ v1 ::: t1) /\ (0;nil ⊢ v2 ::: t2).
+
+  Definition good_rel_map (ρ : var -> triple) : Prop := forall n, let '((t1, t2), R) := ρ n in Rel t1 t2 R.
+
+  Definition pi1 := fun ρ : var -> triple => fun n => fst (fst (ρ n)).
+
+  Definition pi2 := fun ρ : var -> triple => fun n => snd (fst (ρ n)).
+
+  Fixpoint V (ρ : var -> triple) t v1 v2 {struct t} : Prop :=
+    let E ρ t e1 e2 := ((0;nil ⊢ e1 ::: t.[pi1 ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2 ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2) in
+    match t with
+    | TVar n => snd (ρ n) v1 v2
+    | Unit => v1 = Null /\ v2 = Null
+    | Arrow t1 t2 => exists (e1 e2 : {bind expr}), v1 = EAbs t1.[pi1 ρ] e1 /\ v2 = EAbs t1.[pi2 ρ] e2 /\ (forall v1' v2', V ρ t1 v1' v2' -> E ρ t2 (e1.[v1'/]) (e2.[v2'/]))
+    | All t => exists e1 e2 : expr, v1 = TAbs e1 /\ v2 = TAbs e2 /\ forall t1 t2 R, Rel t1 t2 R -> E (((t1, t2), R) .: ρ) t (e1.|[t1/]) (e2.|[t2/])
+    end.
+
+  Definition E ρ' t e1 e2 : Prop := let ρ := proj1_sig in ((0;nil ⊢ e1 ::: t.[pi1 ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2 ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2).
+
+  Lemma V_implies_E : forall ρ t v1 v2, good_rel_map ρ -> V ρ t v1 v2 -> E ρ t v1 v2.
+  Proof.
+    intros. induction t; unfold E; smash;
+      try (repeat simpl in *; destruct H0; subst; eauto).
+    - destruct H0 as [y [ Eq1 [ Eq2 Hyp]]].
+
+  #[export] Hint Resolve V_implies_E : core.
 
   Lemma app_fun_steps_steps : forall e e' e'', e ⇒* e' -> (EApp e e'') ⇒* (EApp e' e'').
   Proof. intros. induction H; eauto. Qed.
