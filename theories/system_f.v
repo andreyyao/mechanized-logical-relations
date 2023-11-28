@@ -113,7 +113,7 @@ Module System_F.
     | TVar n => proj1_sig (ρ n) v1 v2
     | Unit => v1 = Null /\ v2 = Null
     | Arrow t1 t2 => exists (e1 e2 : {bind expr}), v1 = EAbs t1 e1 /\ v2 = EAbs t1 e2 /\ (forall v1' v2', V ρ t1 v1' v2' -> E ρ t2 (e1.[v1'/]) (e2.[v2'/]))
-    | All t => exists (e1 e2 : {bind expr}), v1 = TAbs e1 /\ v2 = TAbs e2 /\ (forall R, E (R .: ρ) t e1 e2)
+    | All t => exists e1 e2 : expr, v1 = TAbs e1 /\ v2 = TAbs e2 /\ (forall R, E (R .: ρ) t e1 e2)
     end.
 
   Definition E ρ t e1 e2 : Prop := exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2.
@@ -187,7 +187,7 @@ Module System_F.
 
   Inductive sem_rel_expr_substs : ev_context -> (var -> compat_rel) -> parallel_subst -> parallel_subst -> Prop :=
   | nil_sem_rel_expr_substs ρ : sem_rel_expr_substs nil ρ ids ids
-  | cons_sem_rel_expr_substs ρ t Γ γ1 γ2 e1 e2 : sem_rel_expr_substs Γ ρ γ1 γ2 -> E ρ t e1 e2 -> sem_rel_expr_substs (t :: Γ) ρ (e1 .: γ1) (e2 .: γ2).
+  | cons_sem_rel_expr_substs ρ t Γ γ1 γ2 v1 v2 : sem_rel_expr_substs Γ ρ γ1 γ2 -> V ρ t v1 v2 -> sem_rel_expr_substs (t :: Γ) ρ (v1 .: γ1) (v2 .: γ2).
   #[export] Hint Constructors sem_rel_expr_substs : core.
 
   Definition semantically_related (Δ : tv_context) Γ e1 e2 t :=
@@ -196,6 +196,15 @@ Module System_F.
 
   Lemma autosubst_help : forall e γ v, e.[up γ].[v/] = e.[v .: γ].
   Proof. intros. autosubst. Qed.
+
+  Lemma sem_rel_expr_substs_prepend : forall Γ ρ γ1 γ2 (R : compat_rel),
+      sem_rel_expr_substs Γ ρ γ1 γ2 ->
+      sem_rel_expr_substs Γ (R .: ρ) (γ1 >>| ren(+1)) (γ2 >>| ren(+1)).
+  Proof.
+    intros. induction H.
+    - eauto.
+    - Unset Printing Notations. Print hcomp. assert ((scons v1 (hcomp γ1 (ren (lift 1)))) = (hcomp (scons v1 γ1) (ren (lift 1)))).
+  Admitted.
 
   (** Fundamental theorem of logical relations for System F : Parametricity *)
   Theorem parametricity : forall Δ Γ e t, Δ;Γ ⊢ e ::: t -> Δ;Γ ⊨ e ~ e ::: t.
@@ -208,7 +217,7 @@ Module System_F.
       + apply multistep_trans with (e' := e3.[arg1/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) e2.[γ1]); eauto.
       + apply multistep_trans with (e' := e4.[arg2/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e4) e2.[γ2]); eauto.
     (* TAbs *)
-    - simpl. exists (TAbs e.[γ1 >>| ren (+1)]), (TAbs e.[γ2 >>| ren (+1)]). smash. exists (e.[γ1 >>| ren (+1)]), (e.[γ2 >>| ren (+1)]). smash. intros. specialize (IHtyping (R .: ρ) (γ1 >>| ren (+1)) (γ2 >>| ren (+1))). admit.
+    - exists (TAbs e).[γ1], (TAbs e).[γ2]. smash. simpl. exists (e.[γ1 >>| ren (+1)]), (e.[γ2 >>| ren (+1)]). smash. intros. specialize (IHtyping (R .: ρ) (γ1 >>| ren (+1)) (γ2 >>| ren (+1))). Unset Printing Notations. admit.
     (* TApp *)
     - destruct (IHtyping ρ γ1 γ2 H0) as [v1 [v2 [S1 [S2 Vall]]]]. inversion Vall as [e1 [e2 [Eq1 [Eq2]]]]. subst.
 
