@@ -131,7 +131,7 @@ Module System_F.
 
   Definition triple : Type := (tipe * tipe) * expr_rel.
 
-  Definition Rel t1 t2 R : Prop := forall v1 v2, R v1 v2 -> value v1 /\ value v2 /\ (0;nil ⊢ v1 ::: t1) /\ (0;nil ⊢ v2 ::: t2).
+  Definition Rel t1 t2 (R : expr_rel) : Prop := forall v1 v2, R v1 v2 -> value v1 /\ value v2 /\ (0;nil ⊢ v1 ::: t1) /\ (0;nil ⊢ v2 ::: t2).
 
   Definition good_rel_map (ρ : var -> triple) : Prop := forall n, let '((t1, t2), R) := ρ n in Rel t1 t2 R.
 
@@ -139,7 +139,7 @@ Module System_F.
 
   Definition pi2 := fun ρ : var -> triple => fun n => snd (fst (ρ n)).
 
-  Fixpoint V (ρ : var -> triple) t v1 v2 {struct t} : Prop :=
+  Fixpoint V ρ t v1 v2 {struct t} : Prop :=
     let E ρ t e1 e2 := ((0;nil ⊢ e1 ::: t.[pi1 ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2 ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2) in
     match t with
     | TVar n => snd (ρ n) v1 v2
@@ -148,7 +148,7 @@ Module System_F.
     | All t => exists e1 e2 : expr, v1 = TAbs e1 /\ v2 = TAbs e2 /\ forall t1 t2 R, Rel t1 t2 R -> E (((t1, t2), R) .: ρ) t (e1.|[t1/]) (e2.|[t2/])
     end.
 
-  Definition E ρ' t e1 e2 : Prop := let ρ := proj1_sig in ((0;nil ⊢ e1 ::: t.[pi1 ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2 ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2).
+  Definition E ρ t e1 e2 : Prop := ((0;nil ⊢ e1 ::: t.[pi1 ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2 ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2).
 
   Lemma V_implies_E : forall ρ t v1 v2, good_rel_map ρ -> V ρ t v1 v2 -> E ρ t v1 v2.
   Proof.
