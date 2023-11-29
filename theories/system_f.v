@@ -125,38 +125,34 @@ Module System_F.
   where " Δ ';' Γ '⊢' e ':::' t " := (typing Δ Γ e t).
   #[export] Hint Constructors typing : core.
 
-  (* Rel[τ1, τ2] *)
+  Notation "∙;∙ '⊢' e ':::' t " := (0;nil ⊢ e ::: t) (at level 99).
 
   Notation expr_rel := (Relation_Definitions.relation expr).
 
   Definition triple : Type := (tipe * tipe) * expr_rel.
 
-  Definition Rel t1 t2 (R : expr_rel) : Prop := forall v1 v2, R v1 v2 -> value v1 /\ value v2 /\ (0;nil ⊢ v1 ::: t1) /\ (0;nil ⊢ v2 ::: t2).
+  Definition Rel t1 t2 (R : expr_rel) : Prop := forall v1 v2, R v1 v2 -> value v1 /\ value v2 /\ (∙;∙ ⊢ v1 ::: t1) /\ (∙;∙ ⊢ v2 ::: t2).
 
-  Definition good_rel_map (ρ : var -> triple) : Prop := forall n, let '((t1, t2), R) := ρ n in Rel t1 t2 R.
+  Definition pi1_ρ := fun ρ : var -> triple => fun n => fst (fst (ρ n)).
 
-  Definition pi1 := fun ρ : var -> triple => fun n => fst (fst (ρ n)).
+  Definition pi2_ρ := fun ρ : var -> triple => fun n => snd (fst (ρ n)).
 
-  Definition pi2 := fun ρ : var -> triple => fun n => snd (fst (ρ n)).
+  (* Lemma good_prepend t1 t2 R (g : sig good_rel_map) : Rel t1 t2 R -> let ρ' := (((t1, t2), R) .: (proj1_sig g)) in { ρ' : var -> triple | good_rel_map ρ' }. *)
+  (* Proof. *)
+  (*   intros. unfold good_rel_map. destruct g as [m Ev]. exists m. destruct n; try subst ρ'; try simpl in ρ'; unfold good_rel_map in Ev; apply Ev. *)
+  (* Qed. *)
 
   Fixpoint V ρ t v1 v2 {struct t} : Prop :=
-    let E ρ t e1 e2 := ((0;nil ⊢ e1 ::: t.[pi1 ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2 ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2) in
+    let E ρ t e1 e2 := exists v1 v2, (0;nil ⊢ v1 ::: t.[pi1_ρ ρ]) /\ (0;nil ⊢ v2 ::: t.[pi2_ρ ρ]) /\ e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2 in
     match t with
-    | TVar n => snd (ρ n) v1 v2
     | Unit => v1 = Null /\ v2 = Null
-    | Arrow t1 t2 => exists (e1 e2 : {bind expr}), v1 = EAbs t1.[pi1 ρ] e1 /\ v2 = EAbs t1.[pi2 ρ] e2 /\ (forall v1' v2', V ρ t1 v1' v2' -> E ρ t2 (e1.[v1'/]) (e2.[v2'/]))
-    | All t => exists e1 e2 : expr, v1 = TAbs e1 /\ v2 = TAbs e2 /\ forall t1 t2 R, Rel t1 t2 R -> E (((t1, t2), R) .: ρ) t (e1.|[t1/]) (e2.|[t2/])
+    | TVar n => snd (ρ n) v1 v2
+    | Arrow t1 t2 => exists (e1 e2 : {bind expr}), v1 = EAbs t1.[pi1_ρ ρ] e1 /\ v2 = EAbs t1.[pi2_ρ ρ] e2 /\ (forall v1' v2', V ρ t1 v1' v2' -> E ρ t2 (e1.[v1'/]) (e2.[v2'/]))
+    | All t0 => exists e1 e2 : expr, v1 = TAbs e1 /\ v2 = TAbs e2 /\ forall t1 t2 R, forall (evidence : Rel t1 t2 R), E (((t1, t2), R) .: ρ) t0 (e1.|[t1/]) (e2.|[t2/])
     end.
 
-  Definition E ρ t e1 e2 : Prop := ((0;nil ⊢ e1 ::: t.[pi1 ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2 ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2).
-
-  Lemma V_implies_E : forall ρ t v1 v2, good_rel_map ρ -> V ρ t v1 v2 -> E ρ t v1 v2.
-  Proof.
-    intros. induction t; unfold E; smash;
-      try (repeat simpl in *; destruct H0; subst; eauto).
-    - destruct H0 as [y [ Eq1 [ Eq2 Hyp]]].
-
-  #[export] Hint Resolve V_implies_E : core.
+  (* Definition E ρ t e1 e2 := ((0;nil ⊢ e1 ::: t.[pi1_ρ ρ]) /\ (0;nil ⊢ e2 ::: t.[pi2_ρ ρ]) /\ exists v1 v2, e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2). *)
+  Definition E ρ t e1 e2 := exists v1 v2, (∙;∙ ⊢ v1 ::: t.[pi1_ρ ρ]) /\ (∙;∙ ⊢ v2 ::: t.[pi2_ρ ρ]) /\ e1 ⇒* v1 /\ e2 ⇒* v2 /\ V ρ t v1 v2.
 
   Lemma app_fun_steps_steps : forall e e' e'', e ⇒* e' -> (EApp e e'') ⇒* (EApp e' e'').
   Proof. intros. induction H; eauto. Qed.
@@ -174,49 +170,54 @@ Module System_F.
   Example polymorphic_identity : expr :=
     TAbs (EAbs (TVar 0) (Var 0)).
 
-  Example polymorphic_identity_related_to_itself :
-    forall ρ, V ρ (All (Arrow (TVar 0) (TVar 0))) polymorphic_identity polymorphic_identity.
-  Proof.
-    intros. unfold V. exists (EAbs (TVar 0) (Var 0)), (EAbs (TVar 0) (Var 0)). smash. intros. exists (EAbs (TVar 0) (Var 0)), (EAbs (TVar 0) (Var 0)). smash. exists (Var 0), (Var 0). smash.
-  Qed.
+  Definition parallel_subst : Type := nat -> expr.
 
-  Definition parallel_subst : Type := var -> expr.
+  Inductive good_exp_maps : ev_context -> (var -> triple) -> parallel_subst -> parallel_subst -> Prop :=
+  | nil_good_exp_map ρ γ1 γ2 : good_exp_maps nil ρ γ1 γ2
+  | cons_good_exp_map ρ t Γ γ1 γ2 v1 v2 : good_exp_maps Γ ρ γ1 γ2 -> V ρ t v1 v2 -> good_exp_maps (t :: Γ) ρ (v1 .: γ1) (v2 .: γ2).
+  #[export] Hint Constructors good_exp_maps : core.
 
-  Inductive sem_rel_expr_substs : ev_context -> (var -> compat_rel) -> parallel_subst -> parallel_subst -> Prop :=
-  | nil_sem_rel_expr_substs ρ : sem_rel_expr_substs nil ρ ids ids
-  | cons_sem_rel_expr_substs ρ t Γ γ1 γ2 v1 v2 : sem_rel_expr_substs Γ ρ γ1 γ2 -> V ρ t v1 v2 -> sem_rel_expr_substs (t :: Γ) ρ (v1 .: γ1) (v2 .: γ2).
-  #[export] Hint Constructors sem_rel_expr_substs : core.
+  Inductive good_rel_map : tv_context -> (var -> triple) -> Prop :=
+  | Z_good_rel_map ρ : good_rel_map 0 ρ
+  | S_good_rel_map n ρ t1 t2 R: good_rel_map n ρ -> Rel t1 t2 R -> good_rel_map (S n) ((t1, t2, R) .: ρ).
+  #[export] Hint Constructors good_rel_map : core.
 
   Definition semantically_related (Δ : tv_context) Γ e1 e2 t :=
-    forall ρ γ1 γ2, sem_rel_expr_substs Γ ρ γ1 γ2 -> E ρ t e1 .[γ1] e2.[γ2].
+    (Δ;Γ ⊢ e1 ::: t) /\ (Δ;Γ ⊢ e2 ::: t) /\
+    forall ρ γ1 γ2, good_rel_map Δ ρ -> good_exp_maps Γ ρ γ1 γ2 ->
+               E ρ t ((e1.[γ1]).|[pi1_ρ ρ]) ((e2.[γ2]).|[pi2_ρ ρ]).
   Notation "Δ ';' Γ ⊨ e '~' f ':::' t" := (semantically_related Δ Γ e f t) (at level 96).
 
   Lemma autosubst_help : forall e γ v, e.[up γ].[v/] = e.[v .: γ].
   Proof. intros. autosubst. Qed.
 
-  Lemma sem_rel_expr_substs_prepend : forall Γ ρ γ1 γ2 (R : compat_rel),
-      sem_rel_expr_substs Γ ρ γ1 γ2 ->
-      sem_rel_expr_substs Γ (R .: ρ) (γ1 >>| ren(+1)) (γ2 >>| ren(+1)).
+  Lemma closed_terms_invariant_γ : forall e t γ, (0;nil ⊢ e ::: t) -> e.[γ] = e.
   Proof.
-    intros. induction H.
-    - eauto.
-    - Unset Printing Notations. Print hcomp. assert ((scons v1 (hcomp γ1 (ren (lift 1)))) = (hcomp (scons v1 γ1) (ren (lift 1)))).
+    intros. simpl. generalize dependent γ. induction H; intros.
+    - simpl. rewrite IHtyping. reflexivity.
+    - simpl. rewrite (IHtyping1 γ), (IHtyping2 γ). reflexivity.
+    - simpl. rewrite (IHtyping (γ >>| ren (+1))). reflexivity.
+    - simpl. rewrite IHtyping. reflexivity.
+    - reflexivity.
+    - admit.
   Admitted.
+
+  (* https://cs.au.dk/~birke/papers/AnIntroductionToLogicalRelations.pdf *)
+  Lemma compositionality : forall Δ t t' ρ,
+      well_formed_tipe Δ t' -> well_formed_tipe (S Δ) t -> good_rel_map Δ ρ ->
+      forall v1 v2, V ρ t.[t'/] v1 v2 <-> V (((t'.[pi1_ρ ρ], t'.[pi2_ρ ρ]), V ρ t') .: ρ) t v1 v2.
+  Proof.
+    intros. induction t'; split.
+    -
+
 
   (** Fundamental theorem of logical relations for System F : Parametricity *)
   Theorem parametricity : forall Δ Γ e t, Δ;Γ ⊢ e ::: t -> Δ;Γ ⊨ e ~ e ::: t.
   Proof.
-    intros. unfold semantically_related. unfold E. induction H; intros.
+    intros. unfold semantically_related. unfold E. smash. intros ρ γ1 γ2. remember (pi1_ρ ρ) as ρ1. remember (pi2_ρ ρ) as ρ2. generalize dependent γ2. generalize dependent γ1. induction H; intros.
     (* EAbs *)
-    - exists (EAbs t1 e.[up γ1]), (EAbs t1 e.[up γ2]). smash. exists e.[up γ1], e.[up γ2]. smash. intros. specialize (IHtyping ρ (v1' .: γ1) (v2' .: γ2)). repeat rewrite autosubst_help. auto.
-    (* EApp *)
-    - simpl. destruct (IHtyping1 ρ γ1 γ2 H1) as [f1 [f2 [Sfun1 [Sfun2 Vfun]]]]. destruct (IHtyping2 ρ γ1 γ2 H1) as [arg1 [arg2 [Sarg1 [Sarg2 Varg]]]]. clear IHtyping1. clear IHtyping2. inversion Vfun. rename x into e3. destruct H2 as [e4 [Eq1 [Eq2]]]. subst. specialize (H2 arg1 arg2 Varg). destruct H2 as [v1 [v2 [Sapp1 [Sapp2 Vapp]]]]. exists v1, v2. smash.
-      + apply multistep_trans with (e' := e3.[arg1/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e3) e2.[γ1]); eauto.
-      + apply multistep_trans with (e' := e4.[arg2/]); eauto. apply multistep_trans with (e' := EApp (EAbs t1 e4) e2.[γ2]); eauto.
-    (* TAbs *)
-    - exists (TAbs e).[γ1], (TAbs e).[γ2]. smash. simpl. exists (e.[γ1 >>| ren (+1)]), (e.[γ2 >>| ren (+1)]). smash. intros. specialize (IHtyping (R .: ρ) (γ1 >>| ren (+1)) (γ2 >>| ren (+1))). Unset Printing Notations. admit.
-    (* TApp *)
-    - destruct (IHtyping ρ γ1 γ2 H0) as [v1 [v2 [S1 [S2 Vall]]]]. inversion Vall as [e1 [e2 [Eq1 [Eq2]]]]. subst.
+    - simpl. exists (EAbs t1.[ρ1] e.[up γ1].|[ρ1]), (EAbs t1.[ρ2] e.[up γ2].|[ρ2]). smash.
+      + apply arrow_intro.
 
   (** Strong normalization of CBV STLC *)
   Theorem strong_normalization : forall e t, ∅ ⊢ e ::: t -> exists v, value v /\ e ⇒* v.
